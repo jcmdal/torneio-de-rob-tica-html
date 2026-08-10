@@ -7,6 +7,26 @@
 
 const PENALTY_POINTS = 5;
 
+// -----------------------------------------------------------------------------
+// FASES DO TORNEIO
+// O torneio ocorre em 3 fases independentes: duas seletivas e a final.
+// Cada fase tem seus próprios 2 rounds por equipe — as pontuações não se
+// misturam entre fases. A passagem de uma fase para a próxima (quem está
+// classificado) é decidida manualmente pela professora/juiz, não calculada
+// automaticamente pelo sistema.
+// -----------------------------------------------------------------------------
+const PHASES = [
+  { slug: "seletiva-16-9", label: "Seletiva 16/9", short: "Seletiva 1", kind: "seletiva" },
+  { slug: "seletiva-23-9", label: "Seletiva 23/9", short: "Seletiva 2", kind: "seletiva" },
+  { slug: "final-03-10", label: "Final 03/10", short: "Final", kind: "final" },
+];
+
+function getPhaseBySlug(slug) {
+  return PHASES.find((p) => p.slug === slug) || null;
+}
+
+const DEFAULT_PHASE_SLUG = PHASES[0].slug;
+
 const GRADES = [
   {
     slug: "4-ano",
