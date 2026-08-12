@@ -125,8 +125,13 @@ create trigger trg_rubric_scores_updated_at
 -- -----------------------------------------------------------------------------
 -- VIEW: melhor rodada de cada equipe, DENTRO DE CADA FASE
 -- Critério de desempate oficial: maior pontuação; em empate, menor tempo.
+-- (DROP antes do CREATE porque o Postgres não permite renomear/reordenar
+-- colunas de uma view existente via CREATE OR REPLACE.)
 -- -----------------------------------------------------------------------------
-create or replace view team_best_round as
+drop view if exists leaderboard;
+drop view if exists team_best_round;
+
+create view team_best_round as
 select distinct on (team_id, phase)
   team_id,
   grade,
@@ -142,7 +147,7 @@ order by team_id, phase, final_score desc, round_time_seconds asc nulls last, cr
 -- VIEW: placar geral (ranking) por equipe e por fase, juntando melhor
 -- rodada + rubrica daquela mesma fase.
 -- -----------------------------------------------------------------------------
-create or replace view leaderboard as
+create view leaderboard as
 select
   t.id as team_id,
   t.grade,

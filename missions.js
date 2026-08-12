@@ -16,6 +16,7 @@ const PENALTY_POINTS = 5;
 // automaticamente pelo sistema.
 // -----------------------------------------------------------------------------
 const PHASES = [
+  { slug: "treino", label: "Treino", short: "Treino", kind: "treino" },
   { slug: "seletiva-16-9", label: "Seletiva 16/9", short: "Seletiva 1", kind: "seletiva" },
   { slug: "seletiva-23-9", label: "Seletiva 23/9", short: "Seletiva 2", kind: "seletiva" },
   { slug: "final-03-10", label: "Final 03/10", short: "Final", kind: "final" },

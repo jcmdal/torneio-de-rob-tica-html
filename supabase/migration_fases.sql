@@ -29,7 +29,12 @@ create unique index uq_rubric_scores_team_phase
   on rubric_scores(team_id, phase);
 
 -- Recria as views para considerar a fase
-create or replace view team_best_round as
+-- (DROP antes do CREATE porque o Postgres não permite renomear/reordenar
+-- colunas de uma view existente via CREATE OR REPLACE.)
+drop view if exists leaderboard;
+drop view if exists team_best_round;
+
+create view team_best_round as
 select distinct on (team_id, phase)
   team_id,
   grade,
@@ -41,7 +46,7 @@ select distinct on (team_id, phase)
 from score_rounds
 order by team_id, phase, final_score desc, round_time_seconds asc nulls last, created_at asc;
 
-create or replace view leaderboard as
+create view leaderboard as
 select
   t.id as team_id,
   t.grade,

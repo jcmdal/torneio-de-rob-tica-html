@@ -366,6 +366,10 @@ input, select, textarea {
   background: linear-gradient(145deg, var(--color-warning-light), var(--color-warning));
 }
 
+.phase-tab.treino.active {
+  background: linear-gradient(145deg, #94a3b8, #64748b);
+}
+
 .phase-badge {
   display: inline-flex;
   align-items: center;
@@ -385,6 +389,10 @@ input, select, textarea {
   color: #b45309;
 }
 
+.phase-badge.treino {
+  color: #475569;
+}
+
 .phase-badge .dot {
   width: 0.5rem;
   height: 0.5rem;
@@ -394,6 +402,10 @@ input, select, textarea {
 
 .phase-badge.final .dot {
   background: var(--color-warning);
+}
+
+.phase-badge.treino .dot {
+  background: #64748b;
 }
 
 /* ---------------------------------------------------------------------- */

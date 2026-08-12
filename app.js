@@ -154,6 +154,39 @@ const Data = {
     if (error) throw error;
     return data || [];
   },
+
+  // -------------------------------------------------------------------------
+  // Ações administrativas (reset de pontuações). Usadas apenas pela página
+  // /admin, protegida por senha.
+  // -------------------------------------------------------------------------
+  async resetRoundsByPhase(phase) {
+    const { error } = await sb().from("score_rounds").delete().eq("phase", phase);
+    if (error) throw error;
+  },
+
+  async resetRubricByPhase(phase) {
+    const { error } = await sb().from("rubric_scores").delete().eq("phase", phase);
+    if (error) throw error;
+  },
+
+  async resetAllQualifications() {
+    const { error } = await sb().from("teams").update({ qualified_for_final: false }).neq("id", "00000000-0000-0000-0000-000000000000");
+    if (error) throw error;
+  },
+
+  async resetEverything() {
+    const { error: e1 } = await sb().from("score_rounds").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    if (e1) throw e1;
+    const { error: e2 } = await sb().from("rubric_scores").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    if (e2) throw e2;
+    const { error: e3 } = await sb().from("teams").update({ qualified_for_final: false }).neq("id", "00000000-0000-0000-0000-000000000000");
+    if (e3) throw e3;
+  },
+
+  async deleteAllTeams() {
+    const { error } = await sb().from("teams").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    if (error) throw error;
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -256,7 +289,10 @@ function renderNavShell() {
         </span>
       </a>
       <nav class="nav-links" id="nav-links-desktop"></nav>
-      <button class="nav-toggle" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false">≡</button>
+      <div class="flex items-center gap-2">
+        <a href="#/admin" class="nav-toggle" id="nav-admin-btn" aria-label="Configurações" title="Configurações">⚙️</a>
+        <button class="nav-toggle" id="nav-toggle" aria-label="Abrir menu" aria-expanded="false">≡</button>
+      </div>
     </div>
     <nav class="container nav-mobile" id="nav-links-mobile"></nav>
   `;
@@ -310,7 +346,7 @@ function renderPhaseBar(container, { onChange } = {}) {
 
   PHASES.forEach((p) => {
     const active = AppState.phase === p.slug;
-    const btn = h(`<button class="phase-tab ${p.kind === "final" ? "final" : ""} ${active ? "active" : ""}">${p.short}</button>`);
+    const btn = h(`<button class="phase-tab ${p.kind} ${active ? "active" : ""}">${p.short}</button>`);
     btn.addEventListener("click", () => {
       if (AppState.phase === p.slug) return;
       AppState.phase = p.slug;
@@ -325,7 +361,7 @@ function renderPhaseBar(container, { onChange } = {}) {
 
 function phaseBadgeHtml(phaseSlug) {
   const phase = getPhaseBySlug(phaseSlug) || PHASES[0];
-  return `<span class="phase-badge ${phase.kind === "final" ? "final" : ""}"><span class="dot"></span>${escapeHtml(phase.label)}</span>`;
+  return `<span class="phase-badge ${phase.kind}"><span class="dot"></span>${escapeHtml(phase.label)}</span>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -426,15 +462,21 @@ route("/", async (app) => {
   );
 
   const phasesEl = document.getElementById("home-phases");
+  const phaseIcon = { final: "🏆", treino: "🧪", seletiva: "" };
+  const phaseDesc = {
+    final: "Só equipes classificadas",
+    treino: "Não conta ponto — com cronômetro",
+    seletiva: "Aberta para testes e pontuação",
+  };
   PHASES.forEach((p) => {
     phasesEl.appendChild(
       h(`
       <a href="#/pontuar" class="card" style="cursor:pointer;" data-phase="${p.slug}">
         <div class="flex items-center justify-between">
           <h3 class="font-display" style="font-size:1.1rem; font-weight:700;">${p.label}</h3>
-          ${p.kind === "final" ? '<span style="font-size:1.2rem;">🏆</span>' : ""}
+          ${phaseIcon[p.kind] ? `<span style="font-size:1.2rem;">${phaseIcon[p.kind]}</span>` : ""}
         </div>
-        <p class="mt-2 text-muted" style="font-size:0.85rem;">${p.kind === "final" ? "Só equipes classificadas" : "Aberta para testes e pontuação"}</p>
+        <p class="mt-2 text-muted" style="font-size:0.85rem;">${phaseDesc[p.kind]}</p>
       </a>`)
     );
   });
@@ -714,7 +756,59 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
     timeSeconds: "",
     judgeName: "",
     notes: "",
+    timerRunning: false,
+    timerElapsedMs: 0,
+    timerStartedAt: null,
   };
+
+  let timerIntervalId = null;
+
+  function formatStopwatch(ms) {
+    const totalSeconds = Math.floor(ms / 1000);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  }
+
+  function currentElapsedMs() {
+    if (state.timerRunning && state.timerStartedAt) {
+      return state.timerElapsedMs + (Date.now() - state.timerStartedAt);
+    }
+    return state.timerElapsedMs;
+  }
+
+  function toggleTimer() {
+    if (state.timerRunning) {
+      // pausar: consolida o tempo decorrido
+      state.timerElapsedMs = currentElapsedMs();
+      state.timerRunning = false;
+      state.timerStartedAt = null;
+    } else {
+      state.timerRunning = true;
+      state.timerStartedAt = Date.now();
+    }
+    renderBody();
+  }
+
+  function resetTimer() {
+    state.timerRunning = false;
+    state.timerStartedAt = null;
+    state.timerElapsedMs = 0;
+    renderBody();
+  }
+
+  function startTimerTick() {
+    if (timerIntervalId) clearInterval(timerIntervalId);
+    timerIntervalId = setInterval(() => {
+      if (!state.timerRunning) return;
+      const displayEl = document.getElementById("timer-display");
+      if (displayEl) {
+        displayEl.textContent = formatStopwatch(currentElapsedMs());
+      }
+    }, 500);
+  }
+  startTimerTick();
+  window.addEventListener("hashchange", () => timerIntervalId && clearInterval(timerIntervalId), { once: true });
 
   const root = h(`
     <div class="container-mid section">
@@ -744,6 +838,7 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
     onChange: async (newPhase) => {
       state.phase = newPhase;
       state.roundNumber = 1;
+      resetTimer();
       await loadRounds();
       loadRoundIntoForm();
       renderBody();
@@ -800,6 +895,7 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
         </button>`);
       btn.addEventListener("click", () => {
         state.roundNumber = n;
+        resetTimer();
         loadRoundIntoForm();
         renderRoundTabs();
         renderBody();
@@ -919,6 +1015,36 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
       renderBody();
     });
     bodyEl.appendChild(penaltyCard);
+
+    // Cronômetro (só na fase Treino) — ajuda a professora a cronometrar o
+    // round de teste e já preenche o campo de tempo automaticamente.
+    if (getPhaseBySlug(state.phase).kind === "treino") {
+      const timerCard = h(`
+        <div class="mission-card" style="border-left:4px solid #64748b;">
+          <div class="flex items-center justify-between" style="flex-wrap:wrap; gap:0.75rem;">
+            <div>
+              <h3 class="font-display" style="font-weight:700;">🧪 Cronômetro de treino</h3>
+              <p class="text-muted" style="font-size:0.88rem;">Use para cronometrar o round de teste. Ao parar, o tempo é preenchido automaticamente abaixo.</p>
+            </div>
+            <div class="flex items-center gap-3">
+              <span id="timer-display" class="font-score" style="font-size:2rem; font-weight:700; color:var(--color-text); min-width:4.5ch; text-align:center;">${formatStopwatch(state.timerElapsedMs)}</span>
+            </div>
+          </div>
+          <div class="flex gap-2 mt-3" style="flex-wrap:wrap;">
+            <button type="button" id="timer-toggle" class="btn ${state.timerRunning ? "btn-danger" : "btn-primary"}">${state.timerRunning ? "⏸ Pausar" : "▶ Iniciar"}</button>
+            <button type="button" id="timer-reset" class="btn btn-secondary">↺ Zerar</button>
+            <button type="button" id="timer-apply" class="btn btn-secondary">✓ Usar este tempo no round</button>
+          </div>
+        </div>
+      `);
+      timerCard.querySelector("#timer-toggle").addEventListener("click", () => toggleTimer());
+      timerCard.querySelector("#timer-reset").addEventListener("click", () => resetTimer());
+      timerCard.querySelector("#timer-apply").addEventListener("click", () => {
+        state.timeSeconds = String(Math.round(state.timerElapsedMs / 1000));
+        renderBody();
+      });
+      bodyEl.appendChild(timerCard);
+    }
 
     // Tempo / juiz / observações
     const metaCard = h(`
@@ -1514,12 +1640,12 @@ route("/equipes", async (app) => {
 route("/ajuda", async (app) => {
   const steps = [
     {
-      title: "Use as seletivas (16/9 e 23/9) para testar o app com calma",
-      body: 'Essas duas fases existem justamente para a equipe pedagógica se familiarizar com o painel antes da final. Pode errar, apagar e refazer pontuações à vontade — nada disso afeta a fase Final, que fica separada.',
+      title: "Use a fase Treino para testar o app sem compromisso",
+      body: 'A fase "Treino" existe para a equipe pedagógica se familiarizar com o painel. As pontuações lançadas nela têm cronômetro próprio e nunca contam para nenhuma classificação — só as seletivas e a final valem oficialmente.',
     },
     {
       title: "Escolha a fase certa antes de pontuar",
-      body: 'No topo da página "Pontuar missões" (e também em Placar, Equipe destaque e Equipes) tem um seletor com as 3 fases: Seletiva 16/9, Seletiva 23/9 e Final. Cada fase guarda suas próprias pontuações, separadas — confirme sempre qual fase está selecionada antes de lançar pontos.',
+      body: 'No topo da página "Pontuar missões" (e também em Placar, Equipe destaque e Equipes) tem um seletor com as 4 fases: Treino, Seletiva 16/9, Seletiva 23/9 e Final. Cada fase guarda suas próprias pontuações, separadas — confirme sempre qual fase está selecionada antes de lançar pontos.',
     },
     {
       title: "Cadastre a equipe (uma única vez, vale para todas as fases)",
@@ -1546,9 +1672,9 @@ route("/ajuda", async (app) => {
   app.appendChild(
     h(`
     <div class="container-narrow section">
-      <span class="eyebrow">🧪 PENSADO PARA A FASE SELETIVA</span>
+      <span class="eyebrow">🧪 GUIA DE USO DO PAINEL</span>
       <h1 class="font-display mt-3" style="font-size:1.9rem; font-weight:700;">Guia da fase seletiva</h1>
-      <p class="mt-2 text-muted">As seletivas de 16/9 e 23/9 são o momento certo para as professoras testarem o painel sem pressa. Este guia explica o fluxo completo — do cadastro da equipe até a marcação de quem se classifica para a final.</p>
+      <p class="mt-2 text-muted">Use a fase Treino e as seletivas de 16/9 e 23/9 para testar o painel sem pressa. Este guia explica o fluxo completo — do cadastro da equipe até a marcação de quem se classifica para a final.</p>
 
       <section class="mt-6">
         <h2 class="font-display" style="font-size:1.3rem; font-weight:700;">Passo a passo</h2>
@@ -1565,32 +1691,6 @@ route("/ajuda", async (app) => {
           <li>As 3 fases (Seletiva 16/9, Seletiva 23/9, Final) guardam pontuações totalmente separadas.</li>
         </ul>
       </section>
-
-      <section class="mt-6">
-        <h2 class="font-display" style="font-size:1.3rem; font-weight:700;">Configuração inicial (só quem for publicar o app)</h2>
-        <div style="display:flex; flex-direction:column; gap:1rem; margin-top:1rem;">
-          <div class="card">
-            <p class="font-display" style="font-weight:700;">1. Criar o banco de dados no Supabase</p>
-            <p class="mt-1 text-muted" style="font-size:0.88rem;">Crie um projeto gratuito em supabase.com. No SQL Editor do projeto, cole o conteúdo do arquivo <code class="inline-code">supabase/schema.sql</code> (incluído nesta pasta) e clique em "Run".</p>
-          </div>
-          <div class="card">
-            <p class="font-display" style="font-weight:700;">2. Já tinha uma versão anterior do painel?</p>
-            <p class="mt-1 text-muted" style="font-size:0.88rem;">Rode também o arquivo <code class="inline-code">supabase/migration_fases.sql</code> — ele adiciona as fases e a classificação sem apagar nenhuma pontuação já lançada.</p>
-          </div>
-          <div class="card">
-            <p class="font-display" style="font-weight:700;">3. Preencher o config.js</p>
-            <p class="mt-1 text-muted" style="font-size:0.88rem;">Abra o arquivo <code class="inline-code">config.js</code> desta pasta e preencha:</p>
-            <pre class="code-block">window.SUPABASE_CONFIG = {
-  url: "https://SEU-PROJETO.supabase.co",
-  anonKey: "sua-chave-anon-aqui",
-};</pre>
-          </div>
-          <div class="card">
-            <p class="font-display" style="font-weight:700;">4. Publicar</p>
-            <p class="mt-1 text-muted" style="font-size:0.88rem;">Não precisa de instalação nem build. Suba a pasta inteira para Vercel, Netlify ou GitHub Pages como site estático.</p>
-          </div>
-        </div>
-      </section>
     </div>
   `)
   );
@@ -1606,6 +1706,194 @@ route("/ajuda", async (app) => {
           <p class="mt-1 text-muted" style="font-size:0.88rem;">${escapeHtml(step.body)}</p>
         </div>
       </li>`)
+    );
+  });
+});
+
+// =============================================================================
+// PÁGINA: Configurações (restrita por senha) — reset de pontuações
+// =============================================================================
+const ADMIN_PASSWORD = "adminsphera";
+
+function isAdminUnlocked() {
+  return sessionStorage.getItem("tmr_admin_unlocked") === "1";
+}
+function setAdminUnlocked(value) {
+  if (value) sessionStorage.setItem("tmr_admin_unlocked", "1");
+  else sessionStorage.removeItem("tmr_admin_unlocked");
+}
+
+route("/admin", async (app) => {
+  if (!isAdminUnlocked()) {
+    const root = h(`
+      <div class="container-narrow section">
+        <h1 class="font-display" style="font-size:1.9rem; font-weight:700;">🔒 Configurações</h1>
+        <p class="mt-2 text-muted">Área restrita — use para resetar pontuações do torneio. Peça a senha à coordenação se não a tiver.</p>
+        <form id="admin-login-form" class="card mt-6">
+          <label class="field-label">Senha de acesso
+            <input type="password" id="admin-password" class="field-input" autocomplete="current-password" placeholder="Digite a senha" />
+          </label>
+          <p id="admin-login-error" class="mt-2" style="font-size:0.85rem; color:var(--color-danger); font-weight:600;"></p>
+          <button type="submit" class="btn btn-primary mt-4">Entrar</button>
+        </form>
+      </div>
+    `);
+    app.appendChild(root);
+    const form = root.querySelector("#admin-login-form");
+    const input = root.querySelector("#admin-password");
+    const errorEl = root.querySelector("#admin-login-error");
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (input.value === ADMIN_PASSWORD) {
+        setAdminUnlocked(true);
+        renderRoute();
+      } else {
+        errorEl.textContent = "Senha incorreta. Tente novamente.";
+        input.value = "";
+        input.focus();
+      }
+    });
+    return;
+  }
+
+  if (!isSupabaseConfigured()) {
+    app.appendChild(h(setupBannerHtml()));
+    return;
+  }
+
+  const root = h(`
+    <div class="container-narrow section">
+      <div class="flex items-center justify-between" style="flex-wrap:wrap; gap:0.75rem;">
+        <div>
+          <h1 class="font-display" style="font-size:1.9rem; font-weight:700;">🔒 Configurações</h1>
+          <p class="mt-2 text-muted">Ações administrativas do torneio. Use com cuidado — apagar pontuações não pode ser desfeito.</p>
+        </div>
+        <button id="admin-logout-btn" class="btn btn-secondary">Sair</button>
+      </div>
+
+      <div class="banner-amber mt-6">
+        <p style="font-weight:700; font-size:0.9rem;">⚠️ Todas as ações abaixo são permanentes</p>
+        <p class="mt-1 text-muted" style="font-size:0.85rem;">Não existe "desfazer". Confirme com a coordenação antes de resetar qualquer pontuação.</p>
+      </div>
+
+      <div id="admin-error"></div>
+      <div id="admin-msg"></div>
+
+      <section class="mt-6">
+        <h2 class="font-display" style="font-size:1.2rem; font-weight:700;">Resetar pontuações de uma fase</h2>
+        <p class="mt-1 text-muted" style="font-size:0.85rem;">Apaga todos os rounds e avaliações de Equipe Destaque lançados em uma fase específica (as outras fases não são afetadas). As equipes cadastradas continuam existindo.</p>
+        <div class="card mt-3">
+          <div class="grid-form-2">
+            <label class="field-label">Fase
+              <select id="admin-phase-select" class="field-input"></select>
+            </label>
+          </div>
+          <button id="admin-reset-phase-btn" class="btn btn-danger mt-4">Resetar pontuações desta fase</button>
+        </div>
+      </section>
+
+      <section class="mt-6">
+        <h2 class="font-display" style="font-size:1.2rem; font-weight:700;">Resetar classificações para a final</h2>
+        <p class="mt-1 text-muted" style="font-size:0.85rem;">Desmarca "Classificada" de todas as equipes, em todos os anos. Útil para recomeçar a definição de quem vai para a final.</p>
+        <div class="card mt-3">
+          <button id="admin-reset-qualifications-btn" class="btn btn-danger">Desmarcar todas as classificações</button>
+        </div>
+      </section>
+
+      <section class="mt-6">
+        <h2 class="font-display" style="font-size:1.2rem; font-weight:700;">Resetar todo o torneio</h2>
+        <p class="mt-1 text-muted" style="font-size:0.85rem;">Apaga TODAS as pontuações (treino, seletivas e final) e todas as classificações. As equipes cadastradas continuam existindo, só zeradas.</p>
+        <div class="card mt-3">
+          <button id="admin-reset-all-btn" class="btn btn-danger">Resetar todas as pontuações do torneio</button>
+        </div>
+      </section>
+
+      <section class="mt-6">
+        <h2 class="font-display" style="font-size:1.2rem; font-weight:700;">Apagar todas as equipes</h2>
+        <p class="mt-1 text-muted" style="font-size:0.85rem;">Remove todas as equipes cadastradas e, junto com elas, todas as pontuações. Use apenas para recomeçar o cadastro do zero (ex.: entre uma edição do torneio e outra).</p>
+        <div class="card mt-3">
+          <button id="admin-delete-teams-btn" class="btn btn-danger">Apagar todas as equipes</button>
+        </div>
+      </section>
+    </div>
+  `);
+  app.appendChild(root);
+
+  const errorEl = root.querySelector("#admin-error");
+  const msgEl = root.querySelector("#admin-msg");
+  const phaseSelect = root.querySelector("#admin-phase-select");
+
+  PHASES.forEach((p) => phaseSelect.appendChild(h(`<option value="${p.slug}">${p.label}</option>`)));
+
+  function showError(msg) {
+    errorEl.innerHTML = msg ? `<p class="banner-error mt-4">${escapeHtml(msg)}</p>` : "";
+  }
+  function showMsg(msg) {
+    msgEl.innerHTML = msg
+      ? `<div class="banner-info mt-4"><p style="font-size:0.88rem; font-weight:600;">✓ ${escapeHtml(msg)}</p></div>`
+      : "";
+  }
+
+  root.querySelector("#admin-logout-btn").addEventListener("click", () => {
+    setAdminUnlocked(false);
+    renderRoute();
+  });
+
+  async function runAction(btn, confirmMsg, action, successMsg) {
+    if (!confirm(confirmMsg)) return;
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "Processando…";
+    showError(null);
+    showMsg(null);
+    try {
+      await action();
+      showMsg(successMsg);
+    } catch (err) {
+      showError(err.message || "Erro ao executar a ação.");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
+  root.querySelector("#admin-reset-phase-btn").addEventListener("click", (e) => {
+    const phase = getPhaseBySlug(phaseSelect.value);
+    runAction(
+      e.target,
+      `Apagar TODAS as pontuações (missões e Equipe Destaque) da fase "${phase.label}"? Esta ação não pode ser desfeita.`,
+      async () => {
+        await Data.resetRoundsByPhase(phase.slug);
+        await Data.resetRubricByPhase(phase.slug);
+      },
+      `Pontuações da fase "${phase.label}" foram resetadas.`
+    );
+  });
+
+  root.querySelector("#admin-reset-qualifications-btn").addEventListener("click", (e) => {
+    runAction(
+      e.target,
+      "Desmarcar 'Classificada' de todas as equipes, em todos os anos? Esta ação não pode ser desfeita.",
+      () => Data.resetAllQualifications(),
+      "Classificações para a final foram resetadas."
+    );
+  });
+
+  root.querySelector("#admin-reset-all-btn").addEventListener("click", (e) => {
+    runAction(
+      e.target,
+      "Apagar TODAS as pontuações do torneio (treino, seletivas e final) e todas as classificações? Esta ação não pode ser desfeita.",
+      () => Data.resetEverything(),
+      "Todas as pontuações do torneio foram resetadas."
+    );
+  });
+
+  root.querySelector("#admin-delete-teams-btn").addEventListener("click", (e) => {
+    runAction(
+      e.target,
+      "Apagar TODAS as equipes cadastradas e todas as pontuações? Esta ação não pode ser desfeita.",
+      () => Data.deleteAllTeams(),
+      "Todas as equipes foram removidas."
     );
   });
 });

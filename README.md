@@ -9,11 +9,12 @@ rápida e uso confortável por professoras durante o torneio.
 
 ## O que há de novo nesta versão: fases do torneio
 
-O torneio acontece em **3 fases independentes**, cada uma com suas próprias
+O torneio acontece em **4 fases independentes**, cada uma com suas próprias
 pontuações:
 
 | Fase | Quando | Quem pontua |
 |---|---|---|
+| **Treino** | A qualquer momento | Todas as equipes — não conta para nenhuma classificação, tem cronômetro próprio |
 | **Seletiva 16/9** | 1ª seletiva | Todas as equipes cadastradas |
 | **Seletiva 23/9** | 2ª seletiva | Todas as equipes cadastradas |
 | **Final 03/10** | Etapa final | Só equipes marcadas como **classificadas** |
@@ -28,9 +29,25 @@ equipes automaticamente por posição no placar. Depois das seletivas, vá em
 a coordenação decidir que avança. Só equipes marcadas aparecem para
 pontuação quando a fase "Final 03/10" estiver selecionada.
 
-As seletivas também servem como **ambiente de testes**: é o momento ideal
-para as professoras se familiarizarem com o painel sem risco de atrapalhar
-os dados da final. Veja o guia completo em `#/ajuda` dentro do app.
+**A fase Treino** é o ambiente ideal para as professoras se familiarizarem
+com o painel sem nenhum risco: as pontuações lançadas nela nunca contam
+para a classificação. Na tela de pontuação, essa fase também mostra um
+**cronômetro** (iniciar/pausar/zerar) para cronometrar o round de teste —
+ao parar, um botão preenche automaticamente o campo de tempo do round.
+
+## Configurações e reset de pontuações
+
+Um ícone de engrenagem (⚙️) no canto superior direito da navbar leva à
+página `#/admin`, protegida por senha (`adminsphera`). Nela é possível:
+
+- Resetar as pontuações (missões + Equipe Destaque) de uma fase específica.
+- Desmarcar a classificação de todas as equipes de uma vez.
+- Resetar o torneio inteiro (todas as fases).
+- Apagar todas as equipes cadastradas.
+
+Todas as ações pedem confirmação antes de executar e **não podem ser
+desfeitas** — use com cuidado, de preferência combinando com a coordenação
+antes de qualquer reset.
 
 ## Arquivos
 
@@ -39,7 +56,7 @@ os dados da final. Veja o guia completo em `#/ajuda` dentro do app.
 | `index.html` | Página única que carrega tudo |
 | `styles.css` | Identidade visual (neumorfismo, índigo) |
 | `missions.js` | **Regras de pontuação** de cada ano, rúbrica e fases do torneio |
-| `app.js` | Toda a lógica do app (rotas, telas, acesso ao banco) |
+| `app.js` | Toda a lógica do app (rotas, telas, acesso ao banco, painel admin) |
 | `config.js` | Onde você cola as chaves do seu projeto Supabase |
 | `assets/tapete-*.jpg` | Imagem do tapete de cada ano, com as missões 1, 2 e 3 marcadas (recortada do fichário oficial) |
 | `supabase/schema.sql` | Script completo para criar as tabelas no Supabase |
@@ -119,10 +136,17 @@ Tudo está centralizado em `missions.js`:
 | `#/destaque` | Avaliar a rúbrica Equipe Destaque por equipe e fase |
 | `#/placar` | Placar ao vivo, por fase e ano, com atualização automática |
 | `#/equipes` | Gestão geral + marcação manual de classificação para a final |
-| `#/ajuda` | Guia da fase seletiva — passo a passo de uso e configuração |
+| `#/ajuda` | Guia da fase seletiva — passo a passo de uso |
+| `#/admin` | Configurações restritas por senha — reset de pontuações |
 
 ## Segurança (nível básico)
 
 Este projeto usa políticas de acesso abertas no Supabase (qualquer pessoa
 com o link do app pode ler e gravar pontuações), pensado para uso interno
 em um evento controlado.
+
+A senha da página `#/admin` (`adminsphera`) é verificada apenas no
+navegador (no `app.js`) — é uma proteção simples contra cliques acidentais,
+não uma barreira de segurança forte. Qualquer pessoa com acesso ao código
+consegue ver a senha. Se quiser trocá-la, edite a constante
+`ADMIN_PASSWORD` no `app.js`.
