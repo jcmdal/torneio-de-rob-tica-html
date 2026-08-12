@@ -733,6 +733,7 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
       </div>
 
       <div class="round-tabs mt-6" id="round-tabs"></div>
+      <div id="mat-image-wrap" class="mt-4"></div>
       <div id="score-error"></div>
       <div id="score-body" class="mt-6"><p class="spinner-text">Carregando…</p></div>
     </div>
@@ -751,8 +752,26 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
 
   const bestBadge = root.querySelector("#best-score-badge");
   const roundTabsEl = root.querySelector("#round-tabs");
+  const matImageWrap = root.querySelector("#mat-image-wrap");
   const errorEl = root.querySelector("#score-error");
   const bodyEl = root.querySelector("#score-body");
+
+  if (config.matImage) {
+    matImageWrap.appendChild(
+      h(`
+      <details class="card" style="padding:0;">
+        <summary style="cursor:pointer; padding:1rem 1.25rem; font-weight:700; font-size:0.9rem; list-style:none; display:flex; align-items:center; justify-content:space-between; gap:0.75rem;">
+          <span>🗺️ Ver tapete com as missões 1, 2 e 3 (${escapeHtml(config.grade)})</span>
+          <span class="text-faint" style="font-weight:500; font-size:0.8rem;">toque para abrir/fechar</span>
+        </summary>
+        <div style="padding:0 1.25rem 1.25rem;">
+          <img src="${config.matImage}" alt="Tapete do torneio com a localização das missões 1, 2 e 3 do ${escapeHtml(config.grade)}"
+            style="width:100%; height:auto; border-radius:var(--radius-sm); box-shadow: inset 4px 4px 8px var(--shadow-dark), inset -4px -4px 8px var(--shadow-light); display:block;" />
+        </div>
+      </details>
+    `)
+    );
+  }
 
   function showError(msg) {
     errorEl.innerHTML = msg ? `<p class="banner-error mt-4">${escapeHtml(msg)}</p>` : "";

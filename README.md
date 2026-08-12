@@ -41,6 +41,7 @@ os dados da final. Veja o guia completo em `#/ajuda` dentro do app.
 | `missions.js` | **Regras de pontuação** de cada ano, rúbrica e fases do torneio |
 | `app.js` | Toda a lógica do app (rotas, telas, acesso ao banco) |
 | `config.js` | Onde você cola as chaves do seu projeto Supabase |
+| `assets/tapete-*.jpg` | Imagem do tapete de cada ano, com as missões 1, 2 e 3 marcadas (recortada do fichário oficial) |
 | `supabase/schema.sql` | Script completo para criar as tabelas no Supabase |
 | `supabase/migration_fases.sql` | Script de migração para quem já tinha a versão anterior (sem fases) rodando |
 
@@ -83,6 +84,14 @@ python3 -m http.server 8000
 
 **Publicado (recomendado):** hospede a pasta inteira como site estático —
 Vercel, Netlify ou GitHub Pages, sem configurar build command nenhum.
+
+## Tapete com as missões
+
+Na tela de pontuação de cada equipe, um cartão recolhível ("🗺️ Ver tapete
+com as missões 1, 2 e 3") mostra a imagem exata do tapete daquele ano —
+recortada do fichário oficial — com a localização das 3 missões marcada.
+Cada série tem sua própria imagem, já que a posição das missões no tapete
+muda de ano para ano.
 
 ## Onde ficam as regras de pontuação e as fases
 

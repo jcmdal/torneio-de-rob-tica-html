@@ -30,6 +30,7 @@ const DEFAULT_PHASE_SLUG = PHASES[0].slug;
 const GRADES = [
   {
     slug: "4-ano",
+    matImage: "assets/tapete-4-ano.jpg",
     grade: "4º ano",
     formLabel: "Torneio Maker de Robótica F1 - 2026",
     maxPoints: 100,
@@ -65,6 +66,7 @@ const GRADES = [
   },
   {
     slug: "5-ano",
+    matImage: "assets/tapete-5-ano.jpg",
     grade: "5º ano",
     formLabel: "Torneio Maker de Robótica F1 - 2026",
     maxPoints: 130,
@@ -97,6 +99,7 @@ const GRADES = [
   },
   {
     slug: "6-ano",
+    matImage: "assets/tapete-6-ano.jpg",
     grade: "6º ano",
     formLabel: "Torneio Maker de Robótica F2 - 2026",
     maxPoints: 60,
@@ -126,6 +129,7 @@ const GRADES = [
   },
   {
     slug: "7-ano",
+    matImage: "assets/tapete-7-ano.jpg",
     grade: "7º ano",
     formLabel: "Torneio Maker de Robótica F2 - 2026",
     maxPoints: 60,
@@ -155,6 +159,7 @@ const GRADES = [
   },
   {
     slug: "8-ano",
+    matImage: "assets/tapete-8-ano.jpg",
     grade: "8º ano",
     formLabel: "Torneio Maker de Robótica F2 - 2026",
     maxPoints: 70,
@@ -186,6 +191,7 @@ const GRADES = [
   },
   {
     slug: "9-ano",
+    matImage: "assets/tapete-9-ano.jpg",
     grade: "9º ano",
     formLabel: "Torneio Maker de Robótica F2 - 2026",
     maxPoints: 60,

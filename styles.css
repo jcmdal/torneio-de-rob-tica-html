@@ -1119,3 +1119,27 @@ pre.code-block {
     var(--neu-d-sm) var(--neu-d-sm) var(--neu-b-sm) var(--shadow-dark),
     calc(var(--neu-d-sm) * -1) calc(var(--neu-d-sm) * -1) var(--neu-b-sm) var(--shadow-light);
 }
+
+/* ---------------------------------------------------------------------- */
+/* Tapete do torneio (imagem colapsável na tela de pontuação)            */
+/* ---------------------------------------------------------------------- */
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary {
+  outline: none;
+}
+
+summary::marker {
+  content: "";
+}
+
+details[open] summary span:first-child::before {
+  content: "▾ ";
+}
+
+details:not([open]) summary span:first-child::before {
+  content: "▸ ";
+}
