@@ -31,9 +31,55 @@ pontuação quando a fase "Final 03/10" estiver selecionada.
 
 **A fase Treino** é o ambiente ideal para as professoras se familiarizarem
 com o painel sem nenhum risco: as pontuações lançadas nela nunca contam
-para a classificação. Na tela de pontuação, essa fase também mostra um
-**cronômetro** (iniciar/pausar/zerar) para cronometrar o round de teste —
-ao parar, um botão preenche automaticamente o campo de tempo do round.
+para a classificação.
+
+O **cronômetro** (iniciar/pausar/zerar) aparece em todas as fases, não só
+no Treino — ao parar, um botão preenche automaticamente o campo de tempo
+do round.
+
+O campo **"Juiz(a)"** já vem pré-preenchido com "Julio" em toda pontuação
+nova (missões e rúbrica Equipe Destaque). Continua editável a qualquer
+momento — útil se outra pessoa também for arbitrar.
+
+## Critério de pontuação por ano
+
+**4º e 5º ano** seguem o fichário original: 3 missões, penalidades
+descontam 5 pontos cada, direto do total.
+
+**6º ao 9º ano (Fundamental 2)** usam um critério diferente:
+
+- A equipe começa com **5 fichas valendo 10 pontos cada** (até 50 pontos de
+  bônus). Cada penalidade sofrida custa **1 ficha** — o bônus restante é
+  somado à pontuação final, em vez de descontado.
+- São **4 missões**, cada uma valendo até 30 pontos:
+  - Missão 1 e Missão 2: tudo ou nada (30 pts se cumprida, 0 se não).
+  - Missão 3 e Missão 4: dependem de quanto do objeto ficou dentro da área
+    demarcada — **"Dentro da área"** vale os 30 pts cheios, **"No limite"**
+    (quase saindo da área) vale **27 pts**, e **"Fora da área"** vale 0.
+- Pontuação máxima possível: 50 (fichas) + 4×30 (missões) = **170 pontos**.
+
+Os nomes/descrições das 4 missões do Fundamental 2 estão como "Missão 1",
+"Missão 2" etc. em `missions.js` — edite o campo `description` de cada uma
+para colocar o texto real do fichário, se quiser.
+
+## Chaveamento das equipes classificadas
+
+A página **Chaveamento** (`#/chaveamento`) monta os confrontos da fase
+Final a partir das equipes marcadas como "Classificada" em **Equipes**:
+
+- **4º, 5º, 6º e 7º ano**: os pares são formados dentro do próprio ano,
+  cruzando as duas turmas (1ª colocada da turma A × 1ª colocada da turma
+  B, 2ª × 2ª, e assim por diante).
+- **8º e 9º ano** formam um grupo único — como o 9º normalmente tem só uma
+  turma classificando 2 equipes, ele disputa junto com o 8º ano. Todas as
+  equipes desse grupo combinado são ordenadas juntas e emparelhadas
+  sequencialmente.
+- Em ambos os casos, a ordem usada é a **maior pontuação de cada equipe
+  entre as duas seletivas** (16/9 e 23/9) — melhor colocada enfrenta a
+  melhor colocada do outro lado, e assim por diante.
+- Essa tela só **exibe** o chaveamento (quem enfrenta quem). A pontuação
+  da Final continua sendo lançada normalmente em "Pontuar missões", como
+  qualquer outra fase.
 
 ## Configurações e reset de pontuações
 
@@ -135,6 +181,7 @@ Tudo está centralizado em `missions.js`:
 | `#/pontuar/{ano}/{equipeId}` | Lançar a pontuação (Round 1 e 2) e penalidades, na fase atual |
 | `#/destaque` | Avaliar a rúbrica Equipe Destaque por equipe e fase |
 | `#/placar` | Placar ao vivo, por fase e ano, com atualização automática |
+| `#/chaveamento` | Confrontos das equipes classificadas, por ano e turma |
 | `#/equipes` | Gestão geral + marcação manual de classificação para a final |
 | `#/ajuda` | Guia da fase seletiva — passo a passo de uso |
 | `#/admin` | Configurações restritas por senha — reset de pontuações |

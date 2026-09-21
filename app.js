@@ -156,6 +156,39 @@ const Data = {
   },
 
   // -------------------------------------------------------------------------
+  // Chaveamento — busca todas as equipes classificadas de um ano, com a
+  // maior pontuação entre as duas seletivas (usada para ordenar os pares
+  // do chaveamento). Equipes sem pontuação em nenhuma seletiva entram com
+  // bestScore = 0, para não travar a montagem do chaveamento.
+  // -------------------------------------------------------------------------
+  async getQualifiedTeamsWithBestScore(grade) {
+    const { data: teams, error: teamsError } = await sb()
+      .from("teams")
+      .select("*")
+      .eq("grade", grade)
+      .eq("qualified_for_final", true);
+    if (teamsError) throw teamsError;
+    if (!teams || teams.length === 0) return [];
+
+    const { data: rows, error: lbError } = await sb()
+      .from("leaderboard")
+      .select("*")
+      .eq("grade", grade)
+      .in("phase", ["seletiva-16-9", "seletiva-23-9"]);
+    if (lbError) throw lbError;
+
+    const bestByTeam = new Map();
+    (rows || []).forEach((row) => {
+      const current = bestByTeam.get(row.team_id) || 0;
+      if (row.best_round_score > current) bestByTeam.set(row.team_id, row.best_round_score);
+    });
+
+    return teams
+      .map((t) => ({ ...t, bestScore: bestByTeam.get(t.id) || 0 }))
+      .sort((a, b) => b.bestScore - a.bestScore);
+  },
+
+  // -------------------------------------------------------------------------
   // Ações administrativas (reset de pontuações). Usadas apenas pela página
   // /admin, protegida por senha.
   // -------------------------------------------------------------------------
@@ -274,6 +307,7 @@ const NAV_LINKS = [
   { href: "#/pontuar", label: "Pontuar missões" },
   { href: "#/destaque", label: "Equipe destaque" },
   { href: "#/placar", label: "Placar" },
+  { href: "#/chaveamento", label: "Chaveamento" },
   { href: "#/equipes", label: "Equipes" },
   { href: "#/ajuda", label: "Guia da seletiva" },
 ];
@@ -439,9 +473,9 @@ route("/", async (app) => {
       <section class="container section">
         <div class="grid-3">
           <div class="card-dark">
-            <p class="font-score" style="font-size:1.7rem; font-weight:700; color:#fca5a5;">-${PENALTY_POINTS}</p>
-            <p class="mt-1" style="font-weight:700;">pontos por penalidade</p>
-            <p class="mt-2" style="font-size:0.88rem; color:rgba(244,245,251,0.7);">Cada vez que a equipe tocar no robô fora da Área da Base até o cumprimento da tarefa desconta ${PENALTY_POINTS} pontos.</p>
+            <p class="font-score" style="font-size:1.7rem; font-weight:700; color:#fca5a5;">⚠️</p>
+            <p class="mt-1" style="font-weight:700;">penalidades</p>
+            <p class="mt-2" style="font-size:0.88rem; color:rgba(244,245,251,0.7);">4º e 5º ano: −${PENALTY_POINTS} pts cada. Fundamental 2 (6º–9º): sistema de fichas, cada penalidade custa 1 ficha de bônus.</p>
           </div>
           <div class="card-dark">
             <p class="font-score" style="font-size:1.7rem; font-weight:700; color:#a5b4fc;">2 rounds</p>
@@ -741,7 +775,9 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
     config.missions.forEach((mission) => {
       values[mission.id] = {};
       mission.fields.forEach((field) => {
-        values[mission.id][field.id] = field.type === "boolean" ? false : 0;
+        if (field.type === "boolean") values[mission.id][field.id] = false;
+        else if (field.type === "zone") values[mission.id][field.id] = null;
+        else values[mission.id][field.id] = 0;
       });
     });
     return values;
@@ -754,7 +790,7 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
     values: emptyValues(),
     penaltyCount: 0,
     timeSeconds: "",
-    judgeName: "",
+    judgeName: DEFAULT_JUDGE_NAME,
     notes: "",
     timerRunning: false,
     timerElapsedMs: 0,
@@ -916,6 +952,7 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
       state.values = emptyValues();
       state.penaltyCount = 0;
       state.timeSeconds = "";
+      state.judgeName = DEFAULT_JUDGE_NAME;
       state.notes = "";
     }
   }
@@ -961,7 +998,7 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
             renderBody();
           });
           fieldsWrap.appendChild(label);
-        } else {
+        } else if (field.type === "counter") {
           const count = Number(raw) || 0;
           const max = field.maxUnits || 0;
           const row = h(`
@@ -982,6 +1019,27 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
             })
           );
           fieldsWrap.appendChild(row);
+        } else if (field.type === "zone") {
+          const selected = raw;
+          const zoneWrap = h(`
+            <div class="counter-field" style="flex-direction:column; align-items:stretch; gap:0.6rem;">
+              <span class="bool-label">${escapeHtml(field.label)}</span>
+              <div class="level-grid" style="grid-template-columns:repeat(${field.options.length}, 1fr); margin-top:0;"></div>
+            </div>`);
+          const grid = zoneWrap.querySelector(".level-grid");
+          field.options.forEach((opt) => {
+            const btn = h(`
+              <button type="button" class="level-btn ${selected === opt.id ? "active" : ""}">
+                <strong>${opt.points}</strong>
+                <small>${escapeHtml(opt.label)}</small>
+              </button>`);
+            btn.addEventListener("click", () => {
+              state.values[mission.id][field.id] = opt.id;
+              renderBody();
+            });
+            grid.appendChild(btn);
+          });
+          fieldsWrap.appendChild(zoneWrap);
         }
       });
 
@@ -989,13 +1047,20 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
     });
     bodyEl.appendChild(missionsWrap);
 
-    // Penalidades
+    // Penalidades — duas variações: desconto fixo (padrão) ou sistema de
+    // fichas (Fundamental 2, quando config.tokenSystem existe).
+    const usesTokens = Boolean(config.tokenSystem);
+    const tokenMax = usesTokens ? config.tokenSystem.count : null;
     const penaltyCard = h(`
       <div class="mission-card" style="border-left:4px solid var(--color-warning);">
         <div class="flex items-center justify-between" style="flex-wrap:wrap; gap:0.75rem;">
           <div>
-            <h3 class="font-display" style="font-weight:700;">Penalidades</h3>
-            <p class="text-muted" style="font-size:0.88rem;">${PENALTY_POINTS} pontos descontados cada vez que a equipe tocar no robô fora da Área da Base.</p>
+            <h3 class="font-display" style="font-weight:700;">${usesTokens ? "Fichas de penalidade" : "Penalidades"}</h3>
+            <p class="text-muted" style="font-size:0.88rem;">
+              ${usesTokens
+                ? `A equipe começa com ${tokenMax} fichas valendo ${config.tokenSystem.pointsPerToken} pts cada (até ${tokenMax * config.tokenSystem.pointsPerToken} pts de bônus). Cada penalidade custa 1 ficha.`
+                : `${PENALTY_POINTS} pontos descontados cada vez que a equipe tocar no robô fora da Área da Base.`}
+            </p>
           </div>
           <div class="counter-controls">
             <button type="button" id="penalty-minus" class="counter-btn" aria-label="Diminuir penalidade">−</button>
@@ -1003,7 +1068,13 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
             <button type="button" id="penalty-plus" class="counter-btn" aria-label="Aumentar penalidade">+</button>
           </div>
         </div>
-        ${state.penaltyCount > 0 ? `<p class="mt-2 font-score" style="font-size:0.9rem; font-weight:700; color:var(--color-danger);">−${result.penaltyTotal} pts no total</p>` : ""}
+        ${
+          usesTokens
+            ? `<p class="mt-2 font-score" style="font-size:0.9rem; font-weight:700; color:${result.tokensRemaining > 0 ? "var(--color-accent-dark)" : "var(--color-danger)"};">${result.tokensRemaining} ficha${result.tokensRemaining === 1 ? "" : "s"} restante${result.tokensRemaining === 1 ? "" : "s"} · +${result.tokenBonus} pts de bônus</p>`
+            : state.penaltyCount > 0
+            ? `<p class="mt-2 font-score" style="font-size:0.9rem; font-weight:700; color:var(--color-danger);">−${result.penaltyTotal} pts no total</p>`
+            : ""
+        }
       </div>
     `);
     penaltyCard.querySelector("#penalty-minus").addEventListener("click", () => {
@@ -1011,20 +1082,20 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
       renderBody();
     });
     penaltyCard.querySelector("#penalty-plus").addEventListener("click", () => {
-      state.penaltyCount += 1;
+      state.penaltyCount = usesTokens ? Math.min(tokenMax, state.penaltyCount + 1) : state.penaltyCount + 1;
       renderBody();
     });
     bodyEl.appendChild(penaltyCard);
 
-    // Cronômetro (só na fase Treino) — ajuda a professora a cronometrar o
-    // round de teste e já preenche o campo de tempo automaticamente.
-    if (getPhaseBySlug(state.phase).kind === "treino") {
+    // Cronômetro — disponível em todas as fases para cronometrar o round e
+    // já preencher o campo de tempo automaticamente.
+    {
       const timerCard = h(`
         <div class="mission-card" style="border-left:4px solid #64748b;">
           <div class="flex items-center justify-between" style="flex-wrap:wrap; gap:0.75rem;">
             <div>
-              <h3 class="font-display" style="font-weight:700;">🧪 Cronômetro de treino</h3>
-              <p class="text-muted" style="font-size:0.88rem;">Use para cronometrar o round de teste. Ao parar, o tempo é preenchido automaticamente abaixo.</p>
+              <h3 class="font-display" style="font-weight:700;">⏱️ Cronômetro do round</h3>
+              <p class="text-muted" style="font-size:0.88rem;">Use para cronometrar o round. Ao parar, o tempo é preenchido automaticamente abaixo.</p>
             </div>
             <div class="flex items-center gap-3">
               <span id="timer-display" class="font-score" style="font-size:2rem; font-weight:700; color:var(--color-text); min-width:4.5ch; text-align:center;">${formatStopwatch(state.timerElapsedMs)}</span>
@@ -1072,7 +1143,7 @@ route("/pontuar/:grade/:teamId", async (app, { grade: slug, teamId }) => {
       <div class="sticky-summary">
         <div class="summary-row">
           <div>
-            <p style="font-size:0.85rem; color:rgba(244,245,251,0.6); font-weight:600;">${escapeHtml(getPhaseBySlug(state.phase).label)} · Missões: ${result.missionsTotal} pts · Penalidades: −${result.penaltyTotal} pts</p>
+            <p style="font-size:0.85rem; color:rgba(244,245,251,0.6); font-weight:600;">${escapeHtml(getPhaseBySlug(state.phase).label)} · Missões: ${result.missionsTotal} pts ${usesTokens ? `· Fichas: +${result.tokenBonus} pts` : `· Penalidades: −${result.penaltyTotal} pts`}</p>
             <p class="font-score summary-score">${result.finalScore}<span> / ${result.maxPossible} pts</span></p>
           </div>
           <button id="save-round-btn" class="btn btn-primary">Salvar Round ${state.roundNumber}</button>
@@ -1157,7 +1228,7 @@ route("/destaque", async (app) => {
     teamId: "",
     existing: null,
     levels: emptyLevels(),
-    judgeName: "",
+    judgeName: DEFAULT_JUDGE_NAME,
     notes: "",
   };
 
@@ -1233,7 +1304,7 @@ route("/destaque", async (app) => {
       const rubric = await Data.getRubricForTeam(state.teamId, state.phase);
       state.existing = rubric;
       state.levels = (rubric && rubric.levels) || emptyLevels();
-      state.judgeName = (rubric && rubric.judge_name) || "";
+      state.judgeName = (rubric && rubric.judge_name) || DEFAULT_JUDGE_NAME;
       state.notes = (rubric && rubric.notes) || "";
       renderRubricBody();
     } catch (err) {
@@ -1657,7 +1728,7 @@ route("/ajuda", async (app) => {
     },
     {
       title: "Registre as penalidades",
-      body: `Toda vez que a equipe tocar no robô fora da Área da Base até o cumprimento da tarefa, toque em "+" nas Penalidades. Cada uma desconta ${PENALTY_POINTS} pontos.`,
+      body: `Toda vez que a equipe tocar no robô fora da Área da Base até o cumprimento da tarefa, toque em "+" nas Penalidades. No 4º e 5º ano cada uma desconta ${PENALTY_POINTS} pontos; no Fundamental 2 (6º ao 9º), cada penalidade custa 1 ficha de bônus.`,
     },
     {
       title: "Depois das seletivas, marque quem está classificado",
@@ -1685,7 +1756,8 @@ route("/ajuda", async (app) => {
         <h2 class="font-display" style="font-size:1.15rem; font-weight:700;">Regras que o app já aplica sozinho</h2>
         <ul style="margin:0.75rem 0 0; padding-left:1.1rem; font-size:0.88rem; color:rgba(244,245,251,0.75); display:flex; flex-direction:column; gap:0.4rem;">
           <li>A pontuação de cada missão nunca passa do máximo definido no fichário.</li>
-          <li>Penalidades descontam ${PENALTY_POINTS} pontos cada, sem deixar o total ficar negativo.</li>
+          <li>4º e 5º ano: penalidades descontam ${PENALTY_POINTS} pontos cada, sem deixar o total ficar negativo.</li>
+          <li>6º ao 9º ano: sistema de fichas — a equipe começa com 5 fichas de 10 pts, cada penalidade custa 1 ficha.</li>
           <li>No placar, vale sempre a maior pontuação entre os dois rounds da equipe — dentro de cada fase.</li>
           <li>Em caso de empate na pontuação, o placar ordena pelo menor tempo do round.</li>
           <li>As 3 fases (Seletiva 16/9, Seletiva 23/9, Final) guardam pontuações totalmente separadas.</li>
@@ -1708,6 +1780,163 @@ route("/ajuda", async (app) => {
       </li>`)
     );
   });
+});
+
+// =============================================================================
+// PÁGINA: Chaveamento — confrontos das equipes classificadas para a final
+//
+// Regras (definidas manualmente, sem cálculo automático de corte):
+//   - 4º, 5º, 6º e 7º ano: as equipes classificadas do próprio ano formam
+//     pares dentro do ano, cruzando as turmas (ex.: 1ª colocada da turma A
+//     x 1ª colocada da turma B, 2ª x 2ª, e assim por diante).
+//   - 8º e 9º ano formam um grupo único (o 9º ano normalmente tem só uma
+//     turma classificando 2 equipes, então disputa junto com o 8º).
+//   - Os pares são ordenados pela MAIOR pontuação de cada equipe entre as
+//     duas seletivas (16/9 e 23/9) — 1º colocado de um lado enfrenta o 1º
+//     colocado do outro, e assim por diante.
+//   - Esta tela só exibe o chaveamento (quem enfrenta quem); a pontuação
+//     da fase Final continua sendo lançada normalmente em "Pontuar missões".
+// =============================================================================
+
+const BRACKET_SOLO_GROUPS = ["4º ano", "5º ano", "6º ano", "7º ano"];
+const BRACKET_COMBINED_GROUP = { label: "8º e 9º ano", grades: ["8º ano", "9º ano"] };
+
+function pairByClass(teams) {
+  // Agrupa por turma (qualquer nome de turma, sem assumir convenção fixa),
+  // ordena cada turma pela melhor pontuação, e cruza por posição.
+  const byClass = new Map();
+  teams.forEach((t) => {
+    const key = t.class || "Sem turma";
+    const arr = byClass.get(key) || [];
+    arr.push(t);
+    byClass.set(key, arr);
+  });
+  // ordena cada turma pela maior pontuação primeiro, para que a posição no
+  // array (índice 0, 1, 2...) reflita a colocação dentro da turma.
+  byClass.forEach((arr) => arr.sort((a, b) => b.bestScore - a.bestScore));
+  const classNames = [...byClass.keys()].sort();
+
+  if (classNames.length < 2) {
+    // Só uma turma classificou (ou nenhuma turma informada): não há como
+    // cruzar A x B — emparelha sequencialmente dentro do próprio grupo.
+    return sequentialPairs(teams);
+  }
+
+  // Usa as duas primeiras turmas (por ordem alfabética) como A e B.
+  const groupA = byClass.get(classNames[0]) || [];
+  const groupB = byClass.get(classNames[1]) || [];
+  const pairs = [];
+  const maxLen = Math.max(groupA.length, groupB.length);
+  for (let i = 0; i < maxLen; i++) {
+    pairs.push({ a: groupA[i] || null, b: groupB[i] || null });
+  }
+
+  // Turmas extras (3ª em diante, se existirem) entram por emparelhamento
+  // sequencial ao final, para não perder nenhuma equipe classificada.
+  const leftover = classNames.slice(2).flatMap((name) => byClass.get(name) || []);
+  if (leftover.length > 0) {
+    pairs.push(...sequentialPairs(leftover));
+  }
+
+  return pairs;
+}
+
+function sequentialPairs(teams) {
+  const sorted = [...teams].sort((a, b) => b.bestScore - a.bestScore);
+  const pairs = [];
+  for (let i = 0; i < sorted.length; i += 2) {
+    pairs.push({ a: sorted[i] || null, b: sorted[i + 1] || null });
+  }
+  return pairs;
+}
+
+route("/chaveamento", async (app) => {
+  if (!isSupabaseConfigured()) {
+    app.appendChild(h(setupBannerHtml()));
+    return;
+  }
+
+  const root = h(`
+    <div class="container-mid section">
+      <h1 class="font-display" style="font-size:1.9rem; font-weight:700;">🏆 Chaveamento</h1>
+      <p class="mt-2 text-muted">Confrontos das equipes classificadas para a Final, montados a partir da maior pontuação de cada uma entre as duas seletivas. Marque as equipes como "Classificada" em <a href="#/equipes" style="font-weight:700; color:var(--color-accent-dark);">Equipes</a> antes de gerar o chaveamento.</p>
+      <div id="bracket-error"></div>
+      <div id="bracket-body" class="mt-6"><p class="spinner-text">Carregando chaveamento…</p></div>
+    </div>
+  `);
+  app.appendChild(root);
+
+  const errorEl = root.querySelector("#bracket-error");
+  const bodyEl = root.querySelector("#bracket-body");
+
+  function showError(msg) {
+    errorEl.innerHTML = msg ? `<p class="banner-error mt-4">${escapeHtml(msg)}</p>` : "";
+  }
+
+  function matchCardHtml(pair) {
+    const side = (team) => {
+      if (!team) {
+        return `<div class="flex items-center justify-between" style="padding:0.6rem 0.9rem; opacity:0.5;">
+          <span style="font-weight:600; font-size:0.9rem;">— vaga em aberto —</span>
+        </div>`;
+      }
+      return `<div class="flex items-center justify-between" style="padding:0.6rem 0.9rem;">
+        <div>
+          <p style="font-weight:700; font-size:0.95rem;">${escapeHtml(team.name)}</p>
+          <p class="text-faint" style="font-size:0.75rem;">${escapeHtml(team.class || "turma não informada")}</p>
+        </div>
+        <span class="font-score" style="font-weight:700; color:var(--color-accent-dark);">${team.bestScore} pts</span>
+      </div>`;
+    };
+    return `
+      <div class="card" style="padding:0.5rem;">
+        ${side(pair.a)}
+        <div style="text-align:center; font-size:0.72rem; font-weight:700; color:var(--color-text-faint); padding:0.15rem 0;">✕</div>
+        ${side(pair.b)}
+      </div>`;
+  }
+
+  async function loadGroup(grade) {
+    const teams = await Data.getQualifiedTeamsWithBestScore(grade);
+    return { grade, teams, pairs: pairByClass(teams) };
+  }
+
+  async function loadCombinedGroup(label, grades) {
+    const lists = await Promise.all(grades.map((g) => Data.getQualifiedTeamsWithBestScore(g)));
+    const teams = lists.flat();
+    return { grade: label, teams, pairs: sequentialPairs(teams) };
+  }
+
+  function renderGroup(group) {
+    const section = h(`<div style="margin-bottom:2rem;"></div>`);
+    section.appendChild(h(`<h2 class="font-display" style="font-size:1.3rem; font-weight:700;">${escapeHtml(group.grade)}</h2>`));
+
+    if (group.teams.length === 0) {
+      section.appendChild(
+        h(`<p class="dashed-empty mt-3">Nenhuma equipe classificada em ${escapeHtml(group.grade)} ainda.</p>`)
+      );
+      return section;
+    }
+
+    const grid = h(`<div class="grid-2 mt-3"></div>`);
+    group.pairs.forEach((pair) => grid.appendChild(h(matchCardHtml(pair))));
+    section.appendChild(grid);
+    return section;
+  }
+
+  try {
+    bodyEl.innerHTML = "";
+    for (const grade of BRACKET_SOLO_GROUPS) {
+      const group = await loadGroup(grade);
+      bodyEl.appendChild(renderGroup(group));
+    }
+    const combined = await loadCombinedGroup(BRACKET_COMBINED_GROUP.label, BRACKET_COMBINED_GROUP.grades);
+    bodyEl.appendChild(renderGroup(combined));
+    showError(null);
+  } catch (err) {
+    bodyEl.innerHTML = "";
+    showError(err.message || "Erro ao montar o chaveamento.");
+  }
 });
 
 // =============================================================================
