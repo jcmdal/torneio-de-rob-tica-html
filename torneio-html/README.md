@@ -1,0 +1,199 @@
+# Torneio Maker de Robótica 2026 — Painel de pontuação
+
+Versão do app em **HTML + CSS + JavaScript puro** — sem Node, sem build, sem
+`npm install`. Basta abrir o arquivo, preencher duas linhas de configuração e
+usar. Hospede em qualquer lugar (Vercel, Netlify, GitHub Pages).
+
+Painel profissional em estilo *soft UI* (neumorfismo), pensado para leitura
+rápida e uso confortável por professoras durante o torneio.
+
+## O que há de novo nesta versão: fases do torneio
+
+O torneio acontece em **4 fases independentes**, cada uma com suas próprias
+pontuações:
+
+| Fase | Quando | Quem pontua |
+|---|---|---|
+| **Treino** | A qualquer momento | Todas as equipes — não conta para nenhuma classificação, tem cronômetro próprio |
+| **Seletiva 16/9** | 1ª seletiva | Todas as equipes cadastradas |
+| **Seletiva 23/9** | 2ª seletiva | Todas as equipes cadastradas |
+| **Final 03/10** | Etapa final | Só equipes marcadas como **classificadas** |
+
+Um seletor de fase aparece no topo das páginas de pontuação, placar, rúbrica
+e equipes — escolha a fase antes de lançar ou consultar pontos. As
+pontuações de uma fase nunca se misturam com as de outra.
+
+**A classificação para a final é sempre manual.** O sistema não corta
+equipes automaticamente por posição no placar. Depois das seletivas, vá em
+**Equipes** e ative o interruptor "Classificada" ao lado de cada equipe que
+a coordenação decidir que avança. Só equipes marcadas aparecem para
+pontuação quando a fase "Final 03/10" estiver selecionada.
+
+**A fase Treino** é o ambiente ideal para as professoras se familiarizarem
+com o painel sem nenhum risco: as pontuações lançadas nela nunca contam
+para a classificação.
+
+O **cronômetro** (iniciar/pausar/zerar) aparece em todas as fases, não só
+no Treino — ao parar, um botão preenche automaticamente o campo de tempo
+do round.
+
+O campo **"Juiz(a)"** já vem pré-preenchido com "Julio" em toda pontuação
+nova (missões e rúbrica Equipe Destaque). Continua editável a qualquer
+momento — útil se outra pessoa também for arbitrar.
+
+## Critério de pontuação por ano
+
+**4º e 5º ano** seguem o fichário original: 3 missões, penalidades
+descontam 5 pontos cada, direto do total.
+
+**6º ao 9º ano (Fundamental 2)** usam um critério diferente:
+
+- A equipe começa com **5 fichas valendo 10 pontos cada** (até 50 pontos de
+  bônus). Cada penalidade sofrida custa **1 ficha** — o bônus restante é
+  somado à pontuação final, em vez de descontado.
+- São **4 missões**, cada uma valendo até 30 pontos:
+  - Missão 1 e Missão 2: tudo ou nada (30 pts se cumprida, 0 se não).
+  - Missão 3 e Missão 4: dependem de quanto do objeto ficou dentro da área
+    demarcada — **"Dentro da área"** vale os 30 pts cheios, **"No limite"**
+    (quase saindo da área) vale **27 pts**, e **"Fora da área"** vale 0.
+- Pontuação máxima possível: 50 (fichas) + 4×30 (missões) = **170 pontos**.
+
+Os nomes/descrições das 4 missões do Fundamental 2 estão como "Missão 1",
+"Missão 2" etc. em `missions.js` — edite o campo `description` de cada uma
+para colocar o texto real do fichário, se quiser.
+
+## Chaveamento das equipes classificadas
+
+A página **Chaveamento** (`#/chaveamento`) monta os confrontos da fase
+Final a partir das equipes marcadas como "Classificada" em **Equipes**:
+
+- **4º, 5º, 6º e 7º ano**: os pares são formados dentro do próprio ano,
+  cruzando as duas turmas (1ª colocada da turma A × 1ª colocada da turma
+  B, 2ª × 2ª, e assim por diante).
+- **8º e 9º ano** formam um grupo único — como o 9º normalmente tem só uma
+  turma classificando 2 equipes, ele disputa junto com o 8º ano. Todas as
+  equipes desse grupo combinado são ordenadas juntas e emparelhadas
+  sequencialmente.
+- Em ambos os casos, a ordem usada é a **maior pontuação de cada equipe
+  entre as duas seletivas** (16/9 e 23/9) — melhor colocada enfrenta a
+  melhor colocada do outro lado, e assim por diante.
+- Essa tela só **exibe** o chaveamento (quem enfrenta quem). A pontuação
+  da Final continua sendo lançada normalmente em "Pontuar missões", como
+  qualquer outra fase.
+
+## Configurações e reset de pontuações
+
+Um ícone de engrenagem (⚙️) no canto superior direito da navbar leva à
+página `#/admin`, protegida por senha (`adminsphera`). Nela é possível:
+
+- Resetar as pontuações (missões + Equipe Destaque) de uma fase específica.
+- Desmarcar a classificação de todas as equipes de uma vez.
+- Resetar o torneio inteiro (todas as fases).
+- Apagar todas as equipes cadastradas.
+
+Todas as ações pedem confirmação antes de executar e **não podem ser
+desfeitas** — use com cuidado, de preferência combinando com a coordenação
+antes de qualquer reset.
+
+## Arquivos
+
+| Arquivo | O que é |
+|---|---|
+| `index.html` | Página única que carrega tudo |
+| `styles.css` | Identidade visual (neumorfismo, índigo) |
+| `missions.js` | **Regras de pontuação** de cada ano, rúbrica e fases do torneio |
+| `app.js` | Toda a lógica do app (rotas, telas, acesso ao banco, painel admin) |
+| `config.js` | Onde você cola as chaves do seu projeto Supabase |
+| `assets/tapete-*.jpg` | Imagem do tapete de cada ano, com as missões 1, 2 e 3 marcadas (recortada do fichário oficial) |
+| `supabase/schema.sql` | Script completo para criar as tabelas no Supabase |
+| `supabase/migration_fases.sql` | Script de migração para quem já tinha a versão anterior (sem fases) rodando |
+
+## Passo a passo
+
+### 1. Criar o banco de dados no Supabase
+
+**Primeira vez configurando o banco:** crie um projeto gratuito em
+[supabase.com](https://supabase.com), abra o **SQL Editor**, cole todo o
+conteúdo de `supabase/schema.sql` e clique em **Run**.
+
+**Já tinha uma versão anterior rodando (sem fases)?** Basta rodar
+`supabase/migration_fases.sql` — ele adiciona as colunas e views novas sem
+apagar nenhuma pontuação já lançada. Tudo que já existia é tratado como
+pertencente à Seletiva 16/9.
+
+Em **Project Settings → API**, copie a **Project URL** e a chave **anon
+public**.
+
+### 2. Preencher `config.js`
+
+```js
+window.SUPABASE_CONFIG = {
+  url: "https://SEU-PROJETO.supabase.co",
+  anonKey: "sua-chave-anon-aqui",
+};
+```
+
+Salve o arquivo — pronto, não precisa de mais nada.
+
+### 3. Usar
+
+**Localmente:** dê duplo clique em `index.html`. Se o navegador bloquear
+alguma chamada por segurança (CORS em `file://`), rode um servidor local:
+
+```bash
+python3 -m http.server 8000
+# depois abra http://localhost:8000
+```
+
+**Publicado (recomendado):** hospede a pasta inteira como site estático —
+Vercel, Netlify ou GitHub Pages, sem configurar build command nenhum.
+
+## Tapete com as missões
+
+Na tela de pontuação de cada equipe, um cartão recolhível ("🗺️ Ver tapete
+com as missões 1, 2 e 3") mostra a imagem exata do tapete daquele ano —
+recortada do fichário oficial — com a localização das 3 missões marcada.
+Cada série tem sua própria imagem, já que a posição das missões no tapete
+muda de ano para ano.
+
+## Onde ficam as regras de pontuação e as fases
+
+Tudo está centralizado em `missions.js`:
+- Regras de cada missão por ano (pontos, contadores, máximos).
+- Lista de fases do torneio (`PHASES`) — se as datas mudarem, é só editar ali.
+- Regras da rúbrica Equipe Destaque.
+
+## Regras de cálculo já aplicadas pelo app
+
+- Cada missão nunca ultrapassa o máximo de pontos definido no fichário.
+- Cada penalidade desconta 5 pontos (nunca deixa o total ficar negativo).
+- No placar, vale a **maior pontuação entre os dois rounds** de cada equipe, **dentro da fase selecionada**.
+- Em caso de empate, o placar ordena pelo **menor tempo** do round de maior pontuação.
+- Na rúbrica Equipe Destaque, pontos do critério = `round((nível ÷ 5) × peso)`.
+
+## Estrutura de telas
+
+| Rota (hash) | O que faz |
+|---|---|
+| `#/` | Início, com cronograma e resumo dos anos |
+| `#/pontuar` | Escolher fase e ano/série |
+| `#/pontuar/{ano}` | Cadastrar/escolher a equipe daquele ano, na fase atual |
+| `#/pontuar/{ano}/{equipeId}` | Lançar a pontuação (Round 1 e 2) e penalidades, na fase atual |
+| `#/destaque` | Avaliar a rúbrica Equipe Destaque por equipe e fase |
+| `#/placar` | Placar ao vivo, por fase e ano, com atualização automática |
+| `#/chaveamento` | Confrontos das equipes classificadas, por ano e turma |
+| `#/equipes` | Gestão geral + marcação manual de classificação para a final |
+| `#/ajuda` | Guia da fase seletiva — passo a passo de uso |
+| `#/admin` | Configurações restritas por senha — reset de pontuações |
+
+## Segurança (nível básico)
+
+Este projeto usa políticas de acesso abertas no Supabase (qualquer pessoa
+com o link do app pode ler e gravar pontuações), pensado para uso interno
+em um evento controlado.
+
+A senha da página `#/admin` (`adminsphera`) é verificada apenas no
+navegador (no `app.js`) — é uma proteção simples contra cliques acidentais,
+não uma barreira de segurança forte. Qualquer pessoa com acesso ao código
+consegue ver a senha. Se quiser trocá-la, edite a constante
+`ADMIN_PASSWORD` no `app.js`.
